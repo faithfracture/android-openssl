@@ -9,44 +9,11 @@
 
 #####################################################################
 
-# Set ANDROID_NDK_ROOT to you NDK location. For example,
-# /opt/android-ndk-r8e or /opt/android-ndk-r9. This can be done in a
-# login script. If ANDROID_NDK_ROOT is not specified, the script will
-# try to pick it up with the value of _ANDROID_NDK_ROOT below. If
-# ANDROID_NDK_ROOT is set, then the value is ignored.
-# _ANDROID_NDK="android-ndk-r8e"
-_ANDROID_NDK="android-ndk-r10d"
-# _ANDROID_NDK="android-ndk-r10"
-
-# Set _ANDROID_EABI to the EABI you want to use. You can find the
-# list in $ANDROID_NDK_ROOT/toolchains. This value is always used.
-# _ANDROID_EABI="x86-4.6"
-# _ANDROID_EABI="arm-linux-androideabi-4.6"
-#_ANDROID_EABI="arm-linux-androideabi-4.9"
-
-# Set _ANDROID_ARCH to the architecture you are building for.
-# This value is always used.
-# _ANDROID_ARCH=arch-x86
-#_ANDROID_ARCH=arch-arm
-
-# Set _ANDROID_API to the API you want to use. You should set it
-# to one of: android-14, android-9, android-8, android-14, android-5
-# android-4, or android-3. You can't set it to the latest (for
-# example, API-17) because the NDK does not supply the platform. At
-# Android 5.0, there will likely be another platform added (android-22?).
-# This value is always used.
-# _ANDROID_API="android-14"
-#_ANDROID_API="android-18"
-_ANDROID_API="android-21"
-
-#####################################################################
-
 # If the user did not specify the NDK location, try and pick it up.
 # We expect something like ANDROID_NDK_ROOT=/opt/android-ndk-r8e
 # or ANDROID_NDK_ROOT=/usr/local/android-ndk-r8e.
 
 if [ -z "$ANDROID_NDK_ROOT" ]; then
-
   _ANDROID_NDK_ROOT=""
   if [ -z "$_ANDROID_NDK_ROOT" ] && [ -d "/usr/local/$_ANDROID_NDK" ]; then
     _ANDROID_NDK_ROOT="/usr/local/$_ANDROID_NDK"
