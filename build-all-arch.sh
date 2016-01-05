@@ -6,6 +6,7 @@
 set -e
 rm -rf build
 
+ARCHS=(armeabi arm64-v8a x86 x86_64)
 OPENSSL_VERSION=1.0.2d
 
 if [ ! -d openssl-$OPENSSL_VERSION ] && [ -e  openssl-$OPENSSL_VERSION.tar.gz ]; then
@@ -14,9 +15,7 @@ fi
 
 mkdir build
 
-archs=(armeabi arm64-v8a x86 x86_64)
-
-for arch in ${archs[@]}; do
+for arch in ${ARCHS[@]}; do
     mkdir -p build/${arch}/lib
 
     xOPTIONS=
@@ -58,8 +57,15 @@ for arch in ${archs[@]}; do
     xCFLAGS="-fPIC -DOPENSSL_PIC -DDSO_DLFCN -DHAVE_DLFCN_H -mandroid -I$ANDROID_DEV/include -B$ANDROID_DEV/$xLIB -O3 -fomit-frame-pointer -Wall"
 
     perl -pi -e 's/install: all install_docs install_sw/install: install_docs install_sw/g' Makefile.org
-    ./Configure $xOPTIONS --openssldir=/usr/local/ssl/android-21/ $configure_platform $xCFLAGS
+    ./Configure shared $xOPTIONS --openssldir=/usr/local/ssl/android-21/ $configure_platform $xCFLAGS
 
+    # Fixup shared library filename for NDK
+    perl -pi -e 's/SHLIB_EXT=\.so\.\$\(SHLIB_MAJOR\)\.\$\(SHLIB_MINOR\)/SHLIB_EXT=\.so/g' Makefile
+    perl -pi -e 's/SHARED_LIBS_LINK_EXTS=\.so\.\$\(SHLIB_MAJOR\) \.so//g' Makefile
+    # quote injection for proper SONAME, fuck...
+    perl -pi -e 's/SHLIB_MAJOR=1/SHLIB_MAJOR=`/g' Makefile
+    perl -pi -e 's/SHLIB_MINOR=0.0/SHLIB_MINOR=`/g' Makefile
+    
     make clean
     make depend
     make all
@@ -67,8 +73,8 @@ for arch in ${archs[@]}; do
     file libcrypto.a
     file libssl.a
     cp -RL include ../build/${arch}/include
-    cp libcrypto.a ../build/${arch}/lib/libprivatecrypto.a
-    cp libssl.a ../build/${arch}/lib/libprivatessl.a
+    cp libcrypto.a ../build/${arch}/lib/libcrypto.a
+    cp libssl.a ../build/${arch}/lib/libssl.a
     cd ..
 done
 exit 0
