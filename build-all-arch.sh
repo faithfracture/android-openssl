@@ -1,80 +1,100 @@
 #!/bin/bash
 #
 # http://wiki.openssl.org/index.php/Android
-#
 
 set -e
-rm -rf build
 
-ARCHS=(armeabi arm64-v8a x86 x86_64)
-OPENSSL_VERSION=1.0.2d
+ARCHS=(android-arm android-arm64 android-x86 android-amd64)
+OPENSSL_VERSION="1.0.2o"
+CURRENT_DIR=$(pwd)
+OUTPUT_DIR="$CURRENT_DIR/output/$OPENSSL_VERSION"
+SYSROOT_INCLUDE="$ANDROID_NDK_ROOT/sysroot/usr/include"
+
+rm -rf $OUTPUT_DIR
+
+if [[ ! -s "openssl-$OPENSSL_VERSION.tar.gz" ]]; then
+    printf "Downloading OpenSSL-%s\n" $OPENSSL_VERSION
+    curl -L -o "openssl-$OPENSSL_VERSION.tar.gz" \
+        https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz
+fi
 
 if [ ! -d openssl-$OPENSSL_VERSION ] && [ -e  openssl-$OPENSSL_VERSION.tar.gz ]; then
     tar -xvf openssl-$OPENSSL_VERSION.tar.gz
 fi
 
-mkdir build
-
 for arch in ${ARCHS[@]}; do
-    mkdir -p build/${arch}/lib
+    printf "Building %s\n" $arch
 
-    xOPTIONS=
-    xLIB="lib"
+    OPTIONS="shared no-ssl2 no-ssl3 no-comp no-hw no-engine no-asm"
+    LIB="lib"
     case ${arch} in
-        "armeabi")
-            _ANDROID_TARGET_SELECT=arch-arm
-            _ANDROID_ARCH=arch-arm
-            _ANDROID_EABI=arm-linux-androideabi-4.9
-            _ANDROID_API=android-19
-            configure_platform="android-armv7" ;;
-        "arm64-v8a")
-            _ANDROID_TARGET_SELECT=arch-arm64-v8a
-            _ANDROID_ARCH=arch-arm64
-            _ANDROID_EABI=aarch64-linux-android-4.9
-            _ANDROID_API=android-21
-            configure_platform="linux-generic64 -DB_ENDIAN" ;;
-        "x86")
-            _ANDROID_TARGET_SELECT=arch-x86
-            _ANDROID_ARCH=arch-x86
-            _ANDROID_EABI=x86-4.9
-            _ANDROID_API=android-21
-            configure_platform="android-x86" ;;
-        "x86_64")
-            _ANDROID_TARGET_SELECT=arch-x86_64
-            _ANDROID_ARCH=arch-x86_64
-            _ANDROID_EABI=x86_64-4.9
-            _ANDROID_API=android-21
-            xLIB="lib64"
-            xOPTIONS="no-asm"
-            configure_platform="linux-generic64" ;;
+        "android-arm")
+            API_NUMBER=19
+            PLATFORM_INCLUDES="arm-linux-androideabi"
+            _ANDROID_TARGET_SELECT="arch-arm"
+            _ANDROID_ARCH="arch-arm"
+            _ANDROID_EABI="arm-linux-androideabi-4.9"
+            _ANDROID_API="android-$API_NUMBER"
+            configure_platform="android-armv7"
+            ;;
+        "android-arm64")
+            API_NUMBER=21
+            PLATFORM_INCLUDES="aarch64-linux-android"
+            _ANDROID_TARGET_SELECT="arch-arm64-v8a"
+            _ANDROID_ARCH="arch-arm64"
+            _ANDROID_EABI="aarch64-linux-android-4.9"
+            _ANDROID_API="android-$API_NUMBER"
+            OPTIONS="$OPTIONS -fomit-frame-pointer -DB_ENDIAN"
+            configure_platform="linux-generic64"
+            ;;
+        "android-x86")
+            API_NUMBER=19
+            PLATFORM_INCLUDES="i686-linux-android"
+            _ANDROID_TARGET_SELECT="arch-x86"
+            _ANDROID_ARCH="arch-x86"
+            _ANDROID_EABI="x86-4.9"
+            _ANDROID_API="android-$API_NUMBER"
+            configure_platform="android-x86"
+            ;;
+        "android-amd64")
+            API_NUMBER=21
+            PLATFORM_INCLUDES="x86_64-linux-android"
+            _ANDROID_TARGET_SELECT="arch-x86_64"
+            _ANDROID_ARCH="arch-x86_64"
+            _ANDROID_EABI="x86_64-4.9"
+            _ANDROID_API="android-$API_NUMBER"
+            LIB="lib64"
+            #OPTIONS="$OPTIONS no-asm"
+            configure_platform="linux-generic64"
+            ;;
     esac
 
     . ./setenv-android-mod.sh
 
-    echo "CROSS COMPILE ENV : $CROSS_COMPILE"
     cd openssl-$OPENSSL_VERSION
 
-    xCFLAGS="-fPIC -DOPENSSL_PIC -DDSO_DLFCN -DHAVE_DLFCN_H -mandroid -I$ANDROID_DEV/include -B$ANDROID_DEV/$xLIB -O3 -fomit-frame-pointer -Wall"
+    CFLAGS="-D__ANDROID_API__=$API_NUMBER -I$SYSROOT_INCLUDE -I$SYSROOT_INCLUDE/$PLATFORM_INCLUDES -B$ANDROID_DEV/$LIB"
 
     perl -pi -e 's/install: all install_docs install_sw/install: install_docs install_sw/g' Makefile.org
-    ./Configure shared $xOPTIONS --openssldir=/usr/local/ssl/android-21/ $configure_platform $xCFLAGS
 
-    # Fixup shared library filename for NDK
-    perl -pi -e 's/SHLIB_EXT=\.so\.\$\(SHLIB_MAJOR\)\.\$\(SHLIB_MINOR\)/SHLIB_EXT=\.so/g' Makefile
-    perl -pi -e 's/SHARED_LIBS_LINK_EXTS=\.so\.\$\(SHLIB_MAJOR\) \.so//g' Makefile
-    # quote injection for proper SONAME, fuck...
-    perl -pi -e 's/SHLIB_MAJOR=1/SHLIB_MAJOR=`/g' Makefile
-    perl -pi -e 's/SHLIB_MINOR=0.0/SHLIB_MINOR=`/g' Makefile
-    
-    make clean
-    make depend
-    make all
+    ./Configure $OPTIONS $configure_platform \
+        --openssldir=/usr/local/ssl/$_ANDROID_API \
+        $CFLAGS \
+        &> $arch.log
+
+    make clean >> $arch.log 2>&1
+    make CALC_VERSIONS="SHLIB_COMPAT=; SHLIB_SOVER=" depend >> $arch.log 2>&1
+    make CALC_VERSIONS="SHLIB_COMPAT=; SHLIB_SOVER=" all >> $arch.log 2>&1
 
     file libcrypto.a
     file libssl.a
-    cp -RL include ../build/${arch}/include
-    cp libcrypto.a ../build/${arch}/lib/libcrypto.a
-    cp libssl.a ../build/${arch}/lib/libssl.a
+
+    mkdir -p $OUTPUT_DIR/lib/${arch}
+    mkdir -p $OUTPUT_DIR/include/${arch}
+    cp -RL include/openssl $OUTPUT_DIR/include/$arch/openssl
+    cp libcrypto.a $OUTPUT_DIR/lib/${arch}/libcrypto.a
+    cp libssl.a $OUTPUT_DIR/lib/${arch}/libssl.a
+    printf "Finished\n\n"
     cd ..
 done
 exit 0
